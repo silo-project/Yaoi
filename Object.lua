@@ -71,6 +71,19 @@ function Object:super (o)
 	return base:new(o)
 end
 
+function Object.isInstanceOf (this, that)
+	repeat
+		if this == that then
+			return true
+		end
+
+		this = this:base()
+	until not this
+
+	return false
+end
+
+---@deprecated # override the __tostring metamethod and use tostring instead.
 ---@return string
 function Object:toString ()
 	return tostring(self)
