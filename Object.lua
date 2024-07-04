@@ -20,53 +20,35 @@ local debug = _G.debug or require("debug")
 ---@return table
 function Object:new (o)
 	o = o or {}
-	self.asGC(self:extend(o), o)
 
-	return o
-end
-
----@private
----@param o table
----@return Object
-function Object:extend (o)
-	local that = getmetatable(o)
-
-	if not that then
+	if not getmetatable(o) then
 		setmetatable(o, self)
 		self.__index = self
-
-		return self
 	end
 
-	return that
-end
-
----@private
----@param that Object # inheritanced from
----@param o Object # gc trigger object
-function Object.asGC (that, o)
 	local proxy = newproxy(false)
 
 	-- copy metamethod from base object
-	that.__gc = that.__gc
+	o.__gc = o.__gc
 
-	debug.setmetatable(proxy, that)
+	debug.setmetatable(proxy, o)
 	o[proxy] = not nil
-end
 
----@return Object?
-function Object:base ()
-	return getmetatable(self)
+	return o
 end
 
 ---@param o? table
 ---@nodiscard
 ---@return table
 function Object:super (o)
-	local base = assert(self:base())
+	local base = assert(getmetatable(self))
 
 	o = o or {}
-	self:extend(o)
+
+	if not getmetatable(o) then
+		setmetatable(o, self)
+		self.__index = self
+	end
 
 	return base:new(o)
 end
@@ -77,16 +59,10 @@ function Object.isInstanceOf (this, that)
 			return true
 		end
 
-		this = this:base()
+		this = getmetatable(this)
 	until not this
 
 	return false
-end
-
----@deprecated # override the __tostring metamethod and use tostring instead.
----@return string
-function Object:toString ()
-	return tostring(self)
 end
 
 function Object:getHashCode ()
