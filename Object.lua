@@ -11,7 +11,7 @@ end
 ---@class Object
 ---@field new fun(self: Object, o?: table): table
 ---@field getHashCode fun(self): number?
----@field __gc (fun(self: userdata))|nil
+---@field __gc? (fun(self: userdata))
 local Object = {}
 local debug = _G.debug or require("debug")
 
@@ -54,6 +54,19 @@ function Object:super (o)
 end
 
 function Object.isInstanceOf (this, that)
+	repeat
+		if this == that then
+			return true
+		end
+
+		this = getmetatable(this)
+	until not this
+
+	return false
+end
+
+
+function Object.instanceof (this, that)
 	repeat
 		if this == that then
 			return true
