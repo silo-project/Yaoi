@@ -7,25 +7,31 @@ local isSupportedGC = not jit
 local debug = _G.debug or require("debug")
 
 ---@class Object
----@field new fun(self: Object, o?: table): table
----@field getHashCode fun(self): number?
+---@field new fun(self: self, o?: table): table
+---@field getHashCode fun(self: self): number?
+---@field final fun(self: self | userdata)
 ---@field __gc? (fun(self: userdata))
 local Object = {}
 
 
-local function inherit (this, that) if not getmetatable(this) then setmetatable(this, that); that.__index = that end end
+local function inherit (self, that)
+	if not getmetatable(self) then
+		-- copy metamethod from base object
+		self.__gc   = that.__gc
+		self.__call = that.__call
+
+		setmetatable(self, that)
+		that.__index = that
+	end
+
+	return self
+end
 
 ---@param o? table
 ---@return table
 ---@nodiscard
 function Object:new (o)
-	o = o or {}
-
-	inherit(o, self)
-
-	-- copy metamethod from base object
-	o.__gc   = o.__gc
-	o.__call = o.__call
+	o = inherit(o or {}, self)
 
 	if not isSupportedGC then
 		o[debug.setmetatable(newproxy(false), o)] = not nil
@@ -37,21 +43,14 @@ end
 ---@param o? table
 ---@return table
 ---@nodiscard
-function Object:super (o)
-	local base = assert(getmetatable(self))
+function Object:super (o) return assert(getmetatable(self)):new(inherit(o or {}, self)) end
 
-	o = o or {}
-
-	inherit(o, self)
-
-	return base:new(o)
-end
-
+---@param this table
+---@param that table
+---@return boolean
 function Object.instanceof (this, that)
 	repeat
-		if this == that then
-			return true
-		end
+		if this == that then return true end
 
 		this = getmetatable(this)
 	until not this
@@ -59,6 +58,7 @@ function Object.instanceof (this, that)
 	return false
 end
 
+---@return number?
 function Object:getHashCode ()
 	return tonumber(string.match(tostring(self), "0x[%x]+"))
 end

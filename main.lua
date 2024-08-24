@@ -5,7 +5,15 @@ local Object = require("Object")
 
 -- Test 1. Automatic garbage-collect
 do
-	local File = Object:new()
+	local function File_gc (self)
+		self = (type(self) == 'userdata') and getmetatable(self) or self
+
+		print(self)
+		print("Thril is gone.")
+	end
+
+	local File = Object:new{__gc = File_gc}
+
 	function File:new (o)
 		o = self:super(o)
 		assert(o.filename)
@@ -14,6 +22,7 @@ do
 		return o
 	end
 
+	--[[
 	function File:__gc ()
 		local this = getmetatable(self)
 
@@ -24,14 +33,20 @@ do
 
 		print("Alert: a File " .. this.filename .. " is now closed.")
 	end
+	--]]
+
+
 
 	local f = File:new{
 		filename = "main.lua",
 	}
-
+	print(tostring(File) .. " is 1")
+	print(tostring(f) .. " is 2")
 	f = nil
 	collectgarbage()
+	print(File_gc)
 end
+collectgarbage()
 
 -- Test 2. Constructor chaining and run isInstanceOf
 do
@@ -77,7 +92,5 @@ do
 	kindTest(ClassA, ClassX)
 	kindTest(ClassX, ClassA)
 end
-
-_ = Object:super()
 
 os.exit(0)
