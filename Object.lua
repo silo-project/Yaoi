@@ -3,28 +3,21 @@
 -- License: LGPL-2.1-only
 -- Part of SILO Project
 
-local isSupportedGC = not jit
-local debug = _G.debug or require("debug")
+local isSupportedGc = not jit
+local debug = (not isSupportedGc) and require 'debug'
 
 ---@class Object
----@field new fun(self: self, o?: table): table
----@field getHashCode fun(self: self): number?
----@field final fun(self: self | userdata)
----@field __gc? (fun(self: userdata))
 local Object = {}
 
+local function inherit (this, that)
+	if not getmetatable(this) then
+		this.__gc = that.__gc
 
-local function inherit (self, that)
-	if not getmetatable(self) then
-		-- copy metamethod from base object
-		self.__gc   = that.__gc
-		self.__call = that.__call
-
-		setmetatable(self, that)
+		setmetatable(this, that)
 		that.__index = that
 	end
 
-	return self
+	return this
 end
 
 ---@param o? table
@@ -33,7 +26,7 @@ end
 function Object:new (o)
 	o = inherit(o or {}, self)
 
-	if not isSupportedGC then
+	if not isSupportedGc then
 		o[debug.setmetatable(newproxy(false), o)] = not nil
 	end
 
@@ -43,17 +36,21 @@ end
 ---@param o? table
 ---@return table
 ---@nodiscard
-function Object:super (o) return assert(getmetatable(self)):new(inherit(o or {}, self)) end
+function Object:super (o)
+	local base = assert(getmetatable(self))
+
+	return base:new(inherit(o or {}, self))
+end
 
 ---@param this table
 ---@param that table
 ---@return boolean
 function Object.instanceof (this, that)
-	repeat
-		if this == that then return true end
-
+	while this do
 		this = getmetatable(this)
-	until not this
+
+		if this == that then return true end
+	end
 
 	return false
 end
@@ -63,6 +60,17 @@ function Object:getHashCode ()
 	return tonumber(string.match(tostring(self), "0x[%x]+"))
 end
 
-Object.__gc = nil
+---@private
+function Object:__gc ()
+	self = (type(self) == 'userdata') and getmetatable(self) or self
+
+	local base = getmetatable(self)
+
+	while base do
+		if base.final then base.final(self) end
+
+		base = getmetatable(base)
+	end
+end
 
 return Object

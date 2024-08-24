@@ -6,13 +6,11 @@ local Object = require("Object")
 -- Test 1. Automatic garbage-collect
 do
 	local function File_gc (self)
-		self = (type(self) == 'userdata') and getmetatable(self) or self
-
 		print(self)
 		print("Thril is gone.")
 	end
 
-	local File = Object:new{__gc = File_gc}
+	local File = Object:new{}
 
 	function File:new (o)
 		o = self:super(o)
@@ -22,29 +20,14 @@ do
 		return o
 	end
 
-	--[[
-	function File:__gc ()
-		local this = getmetatable(self)
-
-		if this == self then
-			print("equal")
-			return
-		end
-
-		print("Alert: a File " .. this.filename .. " is now closed.")
-	end
-	--]]
-
+	File.final = File_gc
 
 
 	local f = File:new{
 		filename = "main.lua",
 	}
-	print(tostring(File) .. " is 1")
-	print(tostring(f) .. " is 2")
 	f = nil
 	collectgarbage()
-	print(File_gc)
 end
 collectgarbage()
 
@@ -92,5 +75,30 @@ do
 	kindTest(ClassA, ClassX)
 	kindTest(ClassX, ClassA)
 end
+
+-- Test 3. GC chaining
+do
+	local ClassA = Object:new()
+	local ClassB = ClassA:new()
+	local ClassC = ClassB:new()
+
+	function ClassA:final ()
+		print("ClassA is gone.")
+	end
+
+	function ClassB:final ()
+		print("ClassB is gone.")
+	end
+
+	function ClassC:final ()
+		print("ClassC is gone.")
+	end
+
+	local class = ClassC:new()
+
+	class = nil
+	collectgarbage()
+end
+collectgarbage()
 
 os.exit(0)
