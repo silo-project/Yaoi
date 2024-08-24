@@ -41,7 +41,7 @@ do
 	local ClassX = ClassA:new()
 
 	local function kindTest (a, b)
-		if a:isInstanceOf(b) then
+		if a:instanceof(b) then
 			print("a is kind of b.")
 		else
 			print("a is not kind of b")

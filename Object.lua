@@ -3,17 +3,15 @@
 -- License: LGPL-2.1-only
 -- Part of SILO Project
 
-if not jit then
-	error("Object library only supported with LuaJIT.")
-end
+local isSupportedGC = not jit
+local debug = _G.debug or require("debug")
 
----@version JIT
 ---@class Object
 ---@field new fun(self: Object, o?: table): table
 ---@field getHashCode fun(self): number?
 ---@field __gc? (fun(self: userdata))
 local Object = {}
-local debug = _G.debug or require("debug")
+
 
 local function inherit (this, that) if not getmetatable(this) then setmetatable(this, that); that.__index = that end end
 
@@ -29,7 +27,9 @@ function Object:new (o)
 	o.__gc   = o.__gc
 	o.__call = o.__call
 
-	o[debug.setmetatable(newproxy(false), o)] = not nil
+	if not isSupportedGC then
+		o[debug.setmetatable(newproxy(false), o)] = not nil
+	end
 
 	return o
 end
