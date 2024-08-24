@@ -1,6 +1,6 @@
 -- luajit-object
 -- Original author: icyselec
--- License: see LICENSE file
+-- License: LGPL-2.1-only
 -- Part of SILO Project
 
 if not jit then
@@ -15,56 +15,37 @@ end
 local Object = {}
 local debug = _G.debug or require("debug")
 
+local function inherit (this, that) if not getmetatable(this) then setmetatable(this, that); that.__index = that end end
+
 ---@param o? table
----@nodiscard
 ---@return table
+---@nodiscard
 function Object:new (o)
 	o = o or {}
 
-	if not getmetatable(o) then
-		setmetatable(o, self)
-		self.__index = self
-	end
-
-	local proxy = newproxy(false)
+	inherit(o, self)
 
 	-- copy metamethod from base object
-	o.__gc = o.__gc
+	o.__gc   = o.__gc
+	o.__call = o.__call
 
-	debug.setmetatable(proxy, o)
-	o[proxy] = not nil
+	o[debug.setmetatable(newproxy(false), o)] = not nil
 
 	return o
 end
 
 ---@param o? table
----@nodiscard
 ---@return table
+---@nodiscard
 function Object:super (o)
 	local base = assert(getmetatable(self))
 
 	o = o or {}
 
-	if not getmetatable(o) then
-		setmetatable(o, self)
-		self.__index = self
-	end
+	inherit(o, self)
 
 	return base:new(o)
 end
-
-function Object.isInstanceOf (this, that)
-	repeat
-		if this == that then
-			return true
-		end
-
-		this = getmetatable(this)
-	until not this
-
-	return false
-end
-
 
 function Object.instanceof (this, that)
 	repeat

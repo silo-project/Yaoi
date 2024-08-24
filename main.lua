@@ -16,9 +16,12 @@ do
 
 	function File:__gc ()
 		local this = getmetatable(self)
+
 		if this == self then
+			print("equal")
 			return
 		end
+
 		print("Alert: a File " .. this.filename .. " is now closed.")
 	end
 
@@ -74,5 +77,7 @@ do
 	kindTest(ClassA, ClassX)
 	kindTest(ClassX, ClassA)
 end
+
+_ = Object:super()
 
 os.exit(0)
