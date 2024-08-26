@@ -1,6 +1,5 @@
 -- execute this file with "love ."
 
--- basic definition
 local Object = require("Object")
 
 -- Test 1. Automatic garbage-collect
@@ -10,7 +9,7 @@ do
 		print("Thril is gone.")
 	end
 
-	local File = Object:new{}
+	local File = Object:extend{}
 
 	function File:new (o)
 		o = self:super(o)
@@ -33,10 +32,10 @@ collectgarbage()
 
 -- Test 2. Constructor chaining and run isInstanceOf
 do
-	local ClassA = Object:new()
-	local ClassB = ClassA:new()
-	local ClassC = ClassB:new()
-	local ClassX = ClassA:new()
+	local ClassA = Object:extend()
+	local ClassB = ClassA:extend()
+	local ClassC = ClassB:extend()
+	local ClassX = ClassA:extend()
 
 	local function kindTest (a, b)
 		if a:instanceof(b) then
@@ -78,9 +77,9 @@ end
 
 -- Test 3. GC chaining
 do
-	local ClassA = Object:new()
-	local ClassB = ClassA:new()
-	local ClassC = ClassB:new()
+	local ClassA = Object:extend()
+	local ClassB = ClassA:extend()
+	local ClassC = ClassB:extend()
 
 	function ClassA:final ()
 		print("ClassA is gone.")
@@ -103,7 +102,7 @@ collectgarbage()
 
 local ffi = require 'ffi'
 
-local Disposable = Object:new()
+local Disposable = Object:extend()
 
 function Disposable:final ()
 	if not self.data then
