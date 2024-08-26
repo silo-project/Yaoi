@@ -101,4 +101,28 @@ do
 end
 collectgarbage()
 
+local ffi = require 'ffi'
+
+local Disposable = Object:new()
+
+function Disposable:final ()
+	if not self.data then
+		return
+	end
+
+	ffi.C.free(self.data)
+end
+
+ffi.cdef[[ void *malloc(size_t size); ]]
+ffi.cdef[[ void free(void *p); ]]
+
+local p = Disposable:new{
+	data = ffi.C.malloc(8)
+}
+
+local b = p
+
+collectgarbage()
+
+
 os.exit(0)
