@@ -7,77 +7,77 @@ local isSupportedGc = not newproxy
 local debug = (not isSupportedGc) and require 'debug'
 
 ---@class Object
+---@field final? fun(self: self)
 local Object = {}
 
-local function default (self, o) return self:super(o or {}) end
-
-local function inherit (this, that)
-	if not getmetatable(this) then
-		that.__gc = that.__gc
-		this.__gc = that.__gc
-
-		if not isSupportedGc then
-			this[debug.setmetatable(newproxy(false), this)] = not nil
-		end
-
-		setmetatable(this, that)
-		that.__index = that
-	end
-
-	return this
-end
-
----@param o? table
----@return table
+---@generic T
+---@param self T
+---@param o any
+---@return T
 ---@nodiscard
 function Object:new (o)
-	return inherit(o or {}, self)
-end
-
-function Object:extend (o)
-	assert(not getmetatable(o), "table expected.")
+	assert(rawget(self, 'new'), "Attempt to instantiate an instance.")
 	o = o or {}
 
-	o.new = o.new or default
+	if not getmetatable(o) then
+		self.__gc = self.__gc
+		o.__gc = self.__gc
 
-	setmetatable(o, self)
-	self.__index = self
+		if not isSupportedGc then
+			o[debug.setmetatable(newproxy(false), o)] = not nil
+		end
 
-	return o
+		setmetatable(o, self)
+		self.__index = self
+		self.__metatable = self
+	end
+
+	local base = getmetatable(self)
+	return base and base:new(o) or o
 end
 
----@param o? table
----@return table
+Object.super = Object.new
+
+---@generic T
+---@param self T
+---@return T
 ---@nodiscard
-function Object:super (o)
-	return assert(getmetatable(self)):new(inherit(o or {}, self))
+function Object:static ()
+	self.new = self.new or Object.new
+	return self
 end
 
----@param that table
+---@param that any
 ---@return boolean
 function Object:instanceof (that)
-	repeat
-		if self == that then return true end
+	that = that or Object
 
-		self = getmetatable(self)
-	until not self
+	if not rawget(self, 'new') then
+		repeat
+			if self == that then return true end
+
+			self = getmetatable(self)
+		until not self
+	end
 
 	return false
 end
 
 ---@private
+---@param self Object | userdata
 function Object:__gc ()
-	self = (type(self) == 'userdata') and getmetatable(self) or self
+	self = (type(self) == 'userdata') and getmetatable(self) or self ---@cast self Object
 
 	-- If not a instance, then return immediately.
 	if rawget(self, 'new') then return end
 
+	---@type Object
 	local base = getmetatable(self)
 
 	while base do
 		if base.final then base.final(self) end
 
-		base = getmetatable(base)
+		base = getmetatable(base) --[[@as Object]]
 	end
 end
 
