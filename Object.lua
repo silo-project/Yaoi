@@ -42,7 +42,7 @@ end
 
 local function sealed (_, _) error("Attempt to instantiate a sealed object.") end
 
----	Instantiate the object.
+---	Instantiate the object or create an inherited type.
 ------
 ---	When an instance overrides a constructor, it becomes a type.
 ---	You can create an instance as a datatype by writing it as follows.
@@ -50,8 +50,7 @@ local function sealed (_, _) error("Attempt to instantiate a sealed object.") en
 ---	local Object = require 'Object'
 ---
 ---	---@class Type: Object
----	---@field name  string
----	---@field info? string
+---	---@field name string
 ---	local Type = Object:new()
 ---
 ---	--- You must override the constructor for each data type.
@@ -59,15 +58,30 @@ local function sealed (_, _) error("Attempt to instantiate a sealed object.") en
 ---		o = self:super(o)
 ---
 ---		-- your custom constructor here, this is example.
----		o.name = o.name or "NullType"
----		o.info = o.info or "NullType is just a nil."
+---		print(string.format("Hello, %s!", o.name))
 ---
 ---		return o
 ---	end
 ---
----	From now on, Type will provide type information. (if LSP is installed)
----	local SomeType = Type:new{ info = "SomeType sometimes become NoneType.", } -- Error: missing-fields
----	local NoneType = Type:new{ info = "NoneType sometimes become SomeType.", name = 0, } -- Error: assign-type-mismatch
+---	If you want to create an instance of `Type`, you just need to change the inheritance grammar a little bit as follows.
+---	local Instance = Type:new() -- `Instance` is class, does not invoke constructor.
+---	local instance = Type:new{ name = "instance", } -- `instance` is instance, does invoke constructor.
+---
+---	If the LSP(lua-language-server) is installed, it issues a warning when an invalid field is passed to the instance constructor.
+---	local nothing = Type:new{} -- Lua Diagnostics. : missing-fields
+---	local invalid = Type:new{ name = 0xDEADBEEF, } -- Lua Diagnostics. : assign-type-mismatch
+---
+---	However, it only checks if the data types match; ignore additional fields passed.
+--- local something = Type:new{ name = "something", some_invalid_field = "money", }
+---
+---	If you want to receive any parameters optional, do as follows.
+---	---@class Type: Object
+---	---@field nullable_value? number
+---
+---	Now, the warning does not appear without passing the parameters to the instance constructor.
+---	local nullable = Type:new{}
+---
+---	Remember, luajit-object always focuses on stability rather that speed.
 ---@generic T: Object
 ---@param self T
 ---@param o any
@@ -75,9 +89,12 @@ local function sealed (_, _) error("Attempt to instantiate a sealed object.") en
 ---@nodiscard
 function Object:new (o)
 	assert(rawget(self, 'new'), "Attempt to instantiate an instance.")
-	o = o or {}
 
-	if not getmetatable(o) then
+	if not o then
+		o = setmetatable({}, self)
+		self.__index = self
+		return o
+	elseif not getmetatable(o) then
 		self.__gc, o.__gc = gc, gc
 
 		if not isSupportedGc then
@@ -114,7 +131,7 @@ function Object:typeof (that)
 
 	if rawget(self, 'new') then
 		repeat
-			if self == that then return true end
+			if self == that and rawget(that, 'new') then return true end
 
 			self = getmetatable(self)
 		until not self
