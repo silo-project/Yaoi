@@ -1,5 +1,11 @@
 ---	SPDX-License-Identifier: LGPL-2.1-only
 
+local newproxy = newproxy
+local getmetatable, setmetatable = getmetatable, setmetatable
+local type = type
+local rawget, rawset = rawget, rawset
+local assert = assert
+
 local isSupportedGc = not newproxy
 local debug = (not isSupportedGc) and require 'debug'
 
@@ -23,24 +29,53 @@ local debug = (not isSupportedGc) and require 'debug'
 ---@field final? fun(self: self)
 local Object = {}
 
+local function finalize (base, self)
+	if base then
+		base(self)
+	end
+end
+
+local function getFinalizer (self, base)
+	if base then
+		return getFinalizer(self, getmetatable(base), finalize(rawget(base, 'final'), self))
+	end
+end
+
 ---@param self Object | userdata
 local function gc (self)
 	self = (type(self) == 'userdata') and getmetatable(self) or self ---@cast self Object
 
-	-- If not a instance, then return immediately.
-	if rawget(self, 'new') then return end
-
-	---@type Object?
-	local base = getmetatable(self)
-
-	while base do
-		if base.final then base.final(self) end
-
-		base = getmetatable(base) --[[@as Object?]]
+	-- Finalizer only invokes on an instance.
+	if not rawget(self, 'new') then
+		return getFinalizer(self, getmetatable(self))
 	end
 end
 
 local function sealed (_, _) error("Attempt to instantiate a sealed object.") end
+
+local function getfield (t, k)
+	if not rawget(t, k) then
+		return getfield(getmetatable(t), k)
+	end
+
+	return rawget(t, k)
+end
+
+function Object.__index (t, k)
+	if t then
+		if rawget(t, k) then
+			return rawget(t, k)
+		end
+
+		if not rawget(t, '__index') then
+			print(t)
+		end
+
+		return rawget(t, '__index')(getmetatable(t), k)
+	end
+end
+
+Object.__gc = gc
 
 ---	Instantiate the object or create an inherited type.
 ------
@@ -57,8 +92,10 @@ local function sealed (_, _) error("Attempt to instantiate a sealed object.") en
 ---	function Type:new (o)
 ---		o = self:super(o)
 ---
----		-- your custom constructor here, this is example.
----		print(string.format("Hello, %s!", o.name))
+---		if o:typeof(o) then
+---			-- your custom constructor here, this is example.
+---			print(string.format("Hello, %s!", o.name))
+---		end
 ---
 ---		return o
 ---	end
@@ -82,35 +119,62 @@ local function sealed (_, _) error("Attempt to instantiate a sealed object.") en
 ---	local nullable = Type:new{}
 ---
 ---	Remember, luajit-object always focuses on stability rather that speed.
+function Object:new (o)
+	o = self:super(o)
+
+	return o
+end
+
+local function cons (o)
+	if not o then
+		return {
+			__index = Object.__index,
+			__gc = Object.__gc,
+			new = Object.new,
+		}
+	end
+
+	rawset(o, '__index', Object.__index)
+	rawset(o, '__gc', Object.__gc)
+
+	return o
+end
+
+local function tails (self, o)
+	if self then
+		return rawget(self, 'new')(self, tails(getmetatable(self), o))
+	else
+		return o
+	end
+end
+
+local function inherit (self, o)
+	if not isSupportedGc then
+		o[debug.setmetatable(newproxy(false), o)] = not nil
+	end
+
+	return setmetatable(cons(o), self)
+end
+
 ---@generic T: Object
 ---@param self T
 ---@param o any
 ---@return T
 ---@nodiscard
-function Object:new (o)
-	assert(rawget(self, 'new'), "Attempt to instantiate an instance.")
-
+function Object:super (o)
+	-- If Datatype
 	if not o then
-		o = setmetatable({}, self)
-		self.__index = self
-		return o
-	elseif not getmetatable(o) then
-		self.__gc, o.__gc = gc, gc
-
-		if not isSupportedGc then
-			o[debug.setmetatable(newproxy(false), o)] = not nil
+		return setmetatable(cons(), self)
+	-- If Instance
+	else
+		assert(rawget(self, 'new'), "Attempt to instantiate an instance.")
+		if not getmetatable(o) then
+			return tails(getmetatable(self), inherit(self, o))
+		else
+			return o
 		end
-
-		setmetatable(o, self)
-		self.__index = self
-		self.__metatable = self
 	end
-
-	local base = getmetatable(self)
-	return base and base:new(o) or o
 end
-
-Object.super = Object.new
 
 ---	Seal the instance.
 ------
@@ -140,6 +204,22 @@ function Object:typeof (that)
 	end
 
 	return false
+end
+
+function Object:typeOf (that)
+	if self then
+		if rawget(self, 'new') then
+			if self == that and rawget(that, 'new') then
+				return true
+			else
+				return Object.typeOf(getmetatable(self), that)
+			end
+		end
+
+		return false
+	end
+
+	return nil
 end
 
 return Object
