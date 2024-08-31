@@ -29,20 +29,42 @@ local debug = (not isSupportedGc) and require 'debug'
 ---@field final? fun(self: self)
 local Object = {}
 
-local function finalize (base, self)
-	if base then
-		base(self)
+local function cache (self, this, index)
+	if not index then
+		return this
+	end
+
+	if not rawget(this, index) then
+		if index ~= 'new' and index ~= 'final' then
+			return cache(self, rawset(this, index, rawget(self, index)), next(self, index))
+		end
+	end
+
+	return cache(self, this, next(self, index))
+end
+
+function Object:cache (this)
+	if this then
+		cache(self, this, next(self, nil))
+	end
+
+	if getmetatable(self) then
+		getmetatable(self):cache(this or self)
 	end
 end
 
 local function getFinalizer (self, base)
 	if base then
-		return getFinalizer(self, getmetatable(base), finalize(rawget(base, 'final'), self))
+		if rawget(base, 'final') then
+			rawget(base, 'final')(self)
+		end
+
+		return getFinalizer(self, getmetatable(base))
 	end
 end
 
 ---@param self Object | userdata
-local function gc (self)
+function Object:__gc ()
 	self = (type(self) == 'userdata') and getmetatable(self) or self ---@cast self Object
 
 	-- Finalizer only invokes on an instance.
@@ -53,29 +75,18 @@ end
 
 local function sealed (_, _) error("Attempt to instantiate a sealed object.") end
 
-local function getfield (t, k)
-	if not rawget(t, k) then
-		return getfield(getmetatable(t), k)
-	end
-
-	return rawget(t, k)
-end
-
-function Object.__index (t, k)
-	if t then
-		if rawget(t, k) then
-			return rawget(t, k)
+---@param name string
+---@return any
+function Object:__index (name)
+	if self then
+		if rawget(self, name) then
+			return rawget(self, name)
 		end
 
-		if not rawget(t, '__index') then
-			print(t)
-		end
-
-		return rawget(t, '__index')(getmetatable(t), k)
+		return rawget(self, '__index')(getmetatable(self), name)
 	end
 end
 
-Object.__gc = gc
 
 ---	Instantiate the object or create an inherited type.
 ------
@@ -122,6 +133,11 @@ Object.__gc = gc
 function Object:new (o)
 	o = self:super(o)
 
+	if not o:typeof(o) then
+		--- Your custom constructor here, this is example.
+		_ = _
+	end
+
 	return o
 end
 
@@ -143,9 +159,9 @@ end
 local function tails (self, o)
 	if self then
 		return rawget(self, 'new')(self, tails(getmetatable(self), o))
-	else
-		return o
 	end
+
+	return o
 end
 
 local function inherit (self, o)
@@ -159,21 +175,24 @@ end
 ---@generic T: Object
 ---@param self T
 ---@param o any
+---@param override? boolean
 ---@return T
 ---@nodiscard
-function Object:super (o)
+function Object:super (o, override)
 	-- If Datatype
 	if not o then
 		return setmetatable(cons(), self)
 	-- If Instance
-	else
+	elseif not getmetatable(o) then
 		assert(rawget(self, 'new'), "Attempt to instantiate an instance.")
-		if not getmetatable(o) then
-			return tails(getmetatable(self), inherit(self, o))
-		else
-			return o
+		if override then
+			return inherit(self, o)
 		end
+
+		return tails(getmetatable(self), inherit(self, o))
 	end
+
+	return o
 end
 
 ---	Seal the instance.
@@ -189,30 +208,14 @@ function Object:sealed () return rawset(self, 'new', sealed) end
 ---* Examine which type inherits a particular type: SomeType:typeof(Object) -- is SomeType inherit Object?
 ---* Instance check: print(Type:typeof(Type), Instance:typeof(Instance)) -- it prints "true, false"
 ---@param that any
----@return boolean
+---@return boolean | nil
 function Object:typeof (that)
-	that = that or Object
-
-	if rawget(self, 'new') then
-		repeat
-			if self == that and rawget(that, 'new') then return true end
-
-			self = getmetatable(self)
-		until not self
-
-		error("Type is unreachable.")
-	end
-
-	return false
-end
-
-function Object:typeOf (that)
 	if self then
 		if rawget(self, 'new') then
 			if self == that and rawget(that, 'new') then
 				return true
 			else
-				return Object.typeOf(getmetatable(self), that)
+				return Object.typeof(getmetatable(self), that)
 			end
 		end
 
