@@ -16,20 +16,30 @@ local cachingIgnores = {
 
 --- Origin of all objects.
 ------
---- This section only describes the fields; the description of the methods is in the beginning of each definition.
-------
----## function Object.final (self)
---- This field may not exist, `self` must have been derived from `Object`.
----
---- Defines the behavior when an instance is destroyed.
---- This function shall work equally on any platform.
---- This function does not necessarily need to be defined.
-------
----## function Object.__gc (self)
---- `self` can be `Object` or `userdata`.
----
---- For each instance, this metamethod will be invoked automatically upon destruction;
---- therefore, it shall not be overriden or called arbitrarily.
+--- The most recommended coding convention in our framework is to define only one class in one file.
+--- Of course, it is not a must.
+--- Here is the template file, copy and use it.
+--[[
+local Object = require 'Object'
+
+---@class Class: Object
+---@field mustneed  any
+---@field optional? any
+local Class = Object:new()
+
+function Class:new (o)
+	o = self:super(o)
+
+	if not o:typeof(o) then
+		assert(o.mustneed)
+		o.optional = o.optional or 42
+	end
+
+	return o
+end
+
+return Class
+--]]
 ---@class Object
 ---@field final? fun(self: self)
 local Object = {}
@@ -48,9 +58,8 @@ local function cache (self, this, index)
 	return cache(self, this, next(self, index))
 end
 
---[[
-To quickly access fields in the base class, copy them.
---]]
+
+--- To quickly access fields in the base class, copy them.
 ---@param this Object
 function Object:cache (this)
 	if this then
@@ -62,7 +71,6 @@ function Object:cache (this)
 	end
 end
 
---- Propagate the finalization.
 ---@return nil
 local function propagateFinalization (self, base)
 	if base then
@@ -75,7 +83,11 @@ local function propagateFinalization (self, base)
 end
 
 --- Automatically invokes the finalizer defined in the inheritance chain.
---- It is used internally, it shall not be redefined, so it is not documented.
+--- ## function Object:final ()
+--- self must be an `Object`
+---
+--- When the inheritance chain contains finalizers, there is considerable performance degradation when an instance is finalized. (or GC-ed.)
+--- Therefore, careful consideration is important when defining finalizers.
 ---@private
 ---@param self Object | userdata
 function Object:__gc ()
@@ -105,51 +117,8 @@ function Object:__index (index)
 	end
 end
 
-
---- Instantiate the object or create an inherited type.
-------
---- When an instance overrides a constructor, it becomes a type.
---- You can create an instance as a datatype by writing it as follows.
---- ---@class Object
---- local Object = require 'Object'
----
---- ---@class Type: Object
---- ---@field name string
---- local Type = Object:new()
----
---- --- You must override the constructor for each data type.
---- function Type:new (o)
---- 	o = self:super(o)
----
---- 	if not o:typeof(o) then
---- 		-- your custom constructor here, this is example.
---- 		print(string.format("Hello, %s!", o.name))
---- 	end
----
---- 	return o
---- end
----
---- If you want to create an instance of `Type`, you just need to change the inheritance grammar a little bit as follows.
---- local Instance = Type:new() -- `Instance` is class, does not invoke constructor.
---- local instance = Type:new{ name = "instance", } -- `instance` is instance, does invoke constructor.
----
---- If the LSP(lua-language-server) is installed, it issues a warning when an invalid field is passed to the instance constructor.
---- local nothing = Type:new{} -- Lua Diagnostics. : missing-fields
---- local invalid = Type:new{ name = 0xDEADBEEF, } -- Lua Diagnostics. : assign-type-mismatch
----
---- However, it only checks if the data types match; ignore additional fields passed.
---- local something = Type:new{ name = "something", some_invalid_field = "money", }
----
---- If you want to receive any parameters optional, do as follows.
---- ---@class Type: Object
---- ---@field nullable_value? number
----
---- Now, the warning does not appear without passing the parameters to the instance constructor.
---- local nullable = Type:new{}
----
---- Remember, luajit-object always focuses on stability rather that speed.
---- Each datatype(class) must have a constructor, except for a constructor inherited from the base type.
---- Therefore, datatypes and instances can be distinguished by the whether they have a constructor.
+--- Front-end function that fires the constructor chain
+--- Because defining a class using annotations is like writing the constructor's parameters, this method should not have any annotations. All information is included in the class definition.
 function Object:new (o)
 	o = self:super(o, true)
 
@@ -191,70 +160,91 @@ local function inherit (self, o)
 end
 
 
+--- This method is used to define a constructor; therefore, it should not be called arbitrarily.
+--- The correct way to call this method is to call directly from the newly defined constructor.
+--- Invoking this method outside of the class's constructor definition is an undefined-behavior.
+---
+--- If the inheritance chain is too long and takes too long to initialize the object, you can try to 'Constructor chain reconstruction'.
+--- Tips: To enable this feature, pass the `true` value to the second parameter of `super` method.
+---
+--- ***Note*** this feature allows you to use it under the condition that you know everything about all super types.
+--- If there's anything you don't know at all, We recommend you not to use it because it's an unsafe feature.
+---
+--- The following code is an example using constructor chain reconstruction.
 --[[
-Automatically invokes the constructor defined in the inheritance chain and creates a new datatype or instance.
-
-Note this method is designed for IDE using LSPs. Without LSPs, you cannot get rich type information.
-
-The constructor of the Object will define the default constructor for the derived datatypes; However, these default constructors will not provide information about the type.
-
-To obtain type information, you must newly define a constructor instead of the default one.
-
---- 1. In our framework, it is recommended to assign that module `Object` to local variables first.
 local Object = require 'Object'
 
---- 2. It is recommended that the path end of the datatype matches the name of the local variable, but it is not required.
----@class SomeType: Object
----@field name string
-local SomeType = Object:new()
+---@class First: Object
+---@field x number
+local First = Object:new()
 
-function SomeType:new (o)
-	--- 3. Only the next line available type inference. Never let the value of the method be returned immediately. (return self:super(o))
+function First:new (o)
 	o = self:super(o)
 
-	--- 4. This is an instance constructor, define everything you need to create an instance in it.
 	if not o:typeof(o) then
-		assert(o.name)
+		assert(o.x)
 	end
 
 	return o
 end
 
---- 5. At the end of the file, you must return the datatype.
-return SomeType
+---@class Second: First
+---@field y number
+local Second = First:new()
 
---- other files...
---- 6. If done correctly, the following variables will be inferred as SomeType.
-local SomeType = require 'SomeType'
+function Second:new (o)
+	o = self:super(o)
 
---- 7. The following code displays a warning on the LSP.
-local derivedType = SomeType:new{}
+	if not o:typeof(o) then
+		assert(o.y)
+	end
 
+	return o
+end
+
+---@class Third: Second
+---@field z number
+local Third = Second:new()
+
+function Third:new (o)
+	o = self:super(o)
+
+	-- You can do all the required initializations in `First` and `Second` in one place.
+	if not o:typeof(o) then
+		assert(o.x and o.y and o.z)
+	end
+
+	return o
+end
+
+local third = Third:new{x = 1, y = 2, z = 3,}
 --]]
+--- when using this feature, Dramatic performance improvements can be achieved with longer inheritance chains.
+--- but it is more important not to create such a long inheritance chain in the first place.
+---@protected
 ---@generic T: Object
 ---@param self T
 ---@param o any
----@param ignore? boolean
+---@param recons? boolean
 ---@return T
 ---@nodiscard
-function Object:super (o, ignore)
+function Object:super (o, recons)
 	-- If Datatype
 	if not o then
 		return setmetatable(cons(self, nil, true), self)
 	-- If Instance
 	elseif not getmetatable(o) then
 		assert(rawget(self, 'new'), "Attempt to instantiate an instance.")
+
 		o = inherit(self, o)
 
-		if not ignore then
+		if not recons then
 			return tails(getmetatable(self), o)
 		end
 	end
 
 	return o
 end
-
-function Object:base () end
 
 --- Seal the instance.
 ------
@@ -287,6 +277,8 @@ function Object:sealed () return rawset(self, 'new', sealed) end
 ---@param that any
 ---@return boolean | nil
 function Object:typeof (that)
+	that = that or self
+
 	if self then
 		if rawget(self, 'new') then
 			if self == that and rawget(that, 'new') then
