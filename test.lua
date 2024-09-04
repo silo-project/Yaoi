@@ -1,10 +1,13 @@
-local Object = require 'Object'
+local Origin = require 'Origin'
 
----@class test.First: Object
-local First = Object:new()
+---@class test.First: Origin
+---@field needed string
+local First = Origin:def()
 
 function First:new (o)
 	o = self:super(o)
+
+	print("First's constructor is called.")
 
 	return o
 end
@@ -14,10 +17,12 @@ function First:final ()
 end
 
 ---@class test.Second: test.First
-local Second = First:new()
+local Second = First:def()
 
 function Second:new (o)
 	o = self:super(o)
+
+	print("Second's constructor is called.")
 
 	return o
 end
@@ -27,10 +32,12 @@ function Second:final ()
 end
 
 ---@class test.Third: test.Second
-local Third = Second:new()
+local Third = Second:def()
 
 function Third:new (o)
 	o = self:super(o)
+
+	print("Third's constructor is called.")
 
 	return o
 end
@@ -39,9 +46,11 @@ function Third:final ()
 	io.stderr:write("Third's finalizer is called.\n")
 end
 
-local third = Third:new{}
+local third = Third:new()
+
+assert(not rawget(third, 'new'))
+_ = third
+---@diagnostic disable-next-line
 third = nil
 collectgarbage()
-
-
 

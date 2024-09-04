@@ -25,15 +25,13 @@ local Origin = require 'Origin'
 ---@class Class: Origin
 ---@field mustneed  any
 ---@field optional? any
-local Class = Origin:new()
+local Class = Origin:def()
 
 function Class:new (o)
 	o = self:super(o)
 
-	if not o:typeof(o) then
-		assert(o.mustneed)
-		o.optional = o.optional or 42
-	end
+	assert(o.mustneed)
+	o.optional = o.optional or 42
 
 	return o
 end
@@ -43,6 +41,27 @@ return Class
 ---@class Origin
 ---@field final? fun(self: self)
 local Origin = {}
+
+---@generic T
+---@param self T
+---@param o any
+---@return T
+function Origin:def (o)
+	assert(rawget(self, 'def'), "Attempt to extend a sealed object.")
+
+	if not o then
+		o = {
+			__index = Origin.__index,
+			__gc = Origin.__gc,
+			new = Origin.new,
+			def = Origin.def,
+		}
+	elseif not getmetatable(o) then
+		o = rawset(rawset(rawset(rawset(o, '__index', Origin.__index), '__gc', Origin.__gc), 'new', Origin.new), 'def', Origin.def)
+	end
+
+	return setmetatable(o, self)
+end
 
 local function cache (self, this, index)
 	if not index then
@@ -99,8 +118,6 @@ function Origin:__gc ()
 	end
 end
 
-local function sealed (_, _) error("Attempt to instantiate a sealed object.") end
-
 --- Called when there is no value in the hash table. If the type is cyclic, it can also cause an infinite recursive.
 --- It is used internally, it shall not be redefined, so it is not documented.
 ---@private
@@ -122,24 +139,6 @@ end
 function Origin:new (o)
 	o = self:super(o, true)
 
-	if not o:typeof(o) then
-		--- Your custom constructor here, this is example.
-		_ = _
-	end
-
-	return o
-end
-
-local function cons (self, o, gc)
-	if not o then
-		o = {
-			__gc = gc and Origin.__gc,
-			new = Origin.new,
-			__index = Origin.__index,
-		}
-		return setmetatable(o, self)
-	end
-
 	return o
 end
 
@@ -150,15 +149,6 @@ local function tails (self, o)
 
 	return o
 end
-
-local function inherit (self, o)
- 	if self.final and not isSupportedGc then
- 		o = rawset(rawset(o, debug.setmetatable(newproxy(false), o), not nil), '__gc', Origin.__gc)
- 	end
-
-	return setmetatable(cons(self, o), self)
-end
-
 
 --- This method is used to define a constructor; therefore, it should not be called arbitrarily.
 --- The correct way to call this method is to call directly from the newly defined constructor.
@@ -176,43 +166,37 @@ local Origin = require 'Origin'
 
 ---@class First: Origin
 ---@field x number
-local First = Origin:new()
+local First = Origin:def()
 
 function First:new (o)
 	o = self:super(o)
 
-	if not o:typeof(o) then
-		assert(o.x)
-	end
+	assert(o.x)
 
 	return o
 end
 
 ---@class Second: First
 ---@field y number
-local Second = First:new()
+local Second = First:def()
 
 function Second:new (o)
 	o = self:super(o)
 
-	if not o:typeof(o) then
-		assert(o.y)
-	end
+	assert(o.y)
 
 	return o
 end
 
 ---@class Third: Second
 ---@field z number
-local Third = Second:new()
+local Third = Second:def()
 
 function Third:new (o)
-	o = self:super(o)
+	o = self:super(o, true)
 
 	-- You can do all the required initializations in `First` and `Second` in one place.
-	if not o:typeof(o) then
-		assert(o.x and o.y and o.z)
-	end
+	assert(o.x and o.y and o.z)
 
 	return o
 end
@@ -229,14 +213,16 @@ local third = Third:new{x = 1, y = 2, z = 3,}
 ---@return T
 ---@nodiscard
 function Origin:super (o, recons)
-	-- If Datatype
-	if not o then
-		return setmetatable(cons(self, nil, true), self)
-	-- If Instance
-	elseif not getmetatable(o) then
+	o = o or {}
+
+	if not getmetatable(o) then
 		assert(rawget(self, 'new'), "Attempt to instantiate an instance.")
 
-		o = inherit(self, o)
+		if rawget(self, 'final') and not isSupportedGc then
+			o = rawset(rawset(o, debug.setmetatable(newproxy(false), o), not nil), '__gc', Origin.__gc)
+		end
+
+		o = setmetatable(o, self)
 
 		if not recons then
 			return tails(getmetatable(self), o)
@@ -246,12 +232,6 @@ function Origin:super (o, recons)
 	return o
 end
 
---- Seal the instance.
-------
---- so that it is no longer derived.
----@return self
----@nodiscard
-function Origin:sealed () return rawset(self, 'new', sealed) end
 
 --- Find out which type the object belongs to.
 ------
@@ -261,8 +241,8 @@ function Origin:sealed () return rawset(self, 'new', sealed) end
 --- Distinguish which objects are datatypes(classes) or instances.
 --- local Origin = require 'Origin'
 ---
---- local objA = Origin:new() -- is datatype
---- local objB = Origin:new{} -- is instance
+--- local objA = Origin:def() -- is datatype
+--- local objB = Origin:new() -- is instance
 ---
 --- local function printKind (t)
 ---     if t:typeof(t) then
