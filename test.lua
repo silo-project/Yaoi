@@ -1,11 +1,13 @@
-local Origin = require 'Origin'
+local Yaoi = require 'Yaoi'
 
----@class test.First: Origin
+---@class test.First: Yaoi
 ---@field needed string
-local First = Origin:def()
+local First = Yaoi:def()
+
+local _ = Yaoi:new()
 
 function First:new (o)
-	o = self:super(o)
+	o = self:base(o)
 
 	print("First's constructor is called.")
 
@@ -20,7 +22,7 @@ end
 local Second = First:def()
 
 function Second:new (o)
-	o = self:super(o)
+	o = self:base(o)
 
 	print("Second's constructor is called.")
 
@@ -35,7 +37,7 @@ end
 local Third = Second:def()
 
 function Third:new (o)
-	o = self:super(o)
+	o = self:base(o)
 
 	print("Third's constructor is called.")
 
