@@ -1,4 +1,21 @@
---- SPDX-License-Identifier: LGPL-2.1-only
+--[[
+--- Yet Another Object Implementation, for Lua.
+--- Copyright (C) 2024  icyselec
+---
+--- This library is free software; you can redistribute it and/or
+--- modify it under the terms of the GNU Lesser General Public
+--- License as published by the Free Software Foundation; either
+--- version 2.1 of the License, or (at your option) any later version.
+---
+--- This library is distributed in the hope that it will be useful,
+--- but WITHOUT ANY WARRANTY; without even the implied warranty of
+--- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+--- Lesser General Public License for more details.
+---
+--- You should have received a copy of the GNU Lesser General Public
+--- License along with this library; if not, write to the Free Software
+--- Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+--]]
 
 local newproxy = newproxy
 local getmetatable, setmetatable = getmetatable, setmetatable
@@ -20,14 +37,14 @@ local cachingIgnores = {
 --- Of course, it is not a must.
 --- Here is the template file, copy and use it.
 --[[
-local Origin = require 'Origin'
+local Object = require 'Yaoi'
 
----@class Class: Origin
+---@class SampleObject: Yaoi
 ---@field mustneed  any
 ---@field optional? any
-local Class = Origin:def()
+local SampleObject = Object:def()
 
-function Class:new (o)
+function SampleObject:new (o)
 	o = self:super(o)
 
 	assert(o.mustneed)
@@ -36,28 +53,28 @@ function Class:new (o)
 	return o
 end
 
-return Class
+return SampleObject
 --]]
----@class Origin
+---@class Yaoi
 ---@field final? fun(self: self)
-local Origin = {}
+local Yaoi = {}
 
 ---@generic T
 ---@param self T
 ---@param o any
 ---@return T
-function Origin:def (o)
+function Yaoi:def (o)
 	assert(rawget(self, 'def'), "Attempt to extend a sealed object.")
 
 	if not o then
 		o = {
-			__index = Origin.__index,
-			__gc = Origin.__gc,
-			new = Origin.new,
-			def = Origin.def,
+			__index = Yaoi.__index,
+			__gc = Yaoi.__gc,
+			new = Yaoi.new,
+			def = Yaoi.def,
 		}
 	elseif not getmetatable(o) then
-		o = rawset(rawset(rawset(rawset(o, '__index', Origin.__index), '__gc', Origin.__gc), 'new', Origin.new), 'def', Origin.def)
+		o = rawset(rawset(rawset(rawset(o, '__index', Yaoi.__index), '__gc', Yaoi.__gc), 'new', Yaoi.new), 'def', Yaoi.def)
 	end
 
 	return setmetatable(o, self)
@@ -79,8 +96,8 @@ end
 
 
 --- To quickly access fields in the base class, copy them.
----@param this Origin
-function Origin:cache (this)
+---@param this Yaoi
+function Yaoi:cache (this)
 	if this then
 		cache(self, this, next(self, nil))
 	end
@@ -102,15 +119,15 @@ local function propagateFinalization (self, base)
 end
 
 --- Automatically invokes the finalizer defined in the inheritance chain.
---- ## function Origin:final ()
---- self must be an `Origin`
+--- ## function Yaoi:final ()
+--- self must be an `Yaoi`
 ---
 --- When the inheritance chain contains finalizers, there is considerable performance degradation when an instance is finalized. (or GC-ed.)
 --- Therefore, careful consideration is important when defining finalizers.
 ---@private
----@param self Origin | userdata
-function Origin:__gc ()
-	self = (type(self) == 'userdata') and getmetatable(self) or self ---@cast self Origin
+---@param self Yaoi | userdata
+function Yaoi:__gc ()
+	self = (type(self) == 'userdata') and getmetatable(self) or self ---@cast self Yaoi
 
 	-- Finalizer only invokes on an instance.
 	if not self:typeof(self) then
@@ -123,23 +140,21 @@ end
 ---@private
 ---@param index any
 ---@return any
-function Origin:__index (index)
+function Yaoi:__index (index)
 	if self then
 		local value = rawget(self, index)
 		if value then
 			return value
 		end
 
-		return Origin.__index(getmetatable(self), index)
+		return Yaoi.__index(getmetatable(self), index)
 	end
 end
 
 --- Front-end function that fires the constructor chain
 --- Because defining a class using annotations is like writing the constructor's parameters, this method should not have any annotations. All information is included in the class definition.
-function Origin:new (o)
-	o = self:super(o, true)
-
-	return o
+function Yaoi:new (o)
+	return self:super(o, true)
 end
 
 local function tails (self, o)
@@ -162,11 +177,11 @@ end
 ---
 --- The following code is an example using constructor chain reconstruction.
 --[[
-local Origin = require 'Origin'
+local Yaoi = require 'Yaoi'
 
----@class First: Origin
+---@class First: Yaoi
 ---@field x number
-local First = Origin:def()
+local First = Yaoi:def()
 
 function First:new (o)
 	o = self:super(o)
@@ -206,20 +221,20 @@ local third = Third:new{x = 1, y = 2, z = 3,}
 --- when using this feature, Dramatic performance improvements can be achieved with longer inheritance chains.
 --- but it is more important not to create such a long inheritance chain in the first place.
 ---@protected
----@generic T: Origin
+---@generic T: Yaoi
 ---@param self T
 ---@param o any
 ---@param recons? boolean
 ---@return T
 ---@nodiscard
-function Origin:super (o, recons)
+function Yaoi:super (o, recons)
 	o = o or {}
 
 	if not getmetatable(o) then
 		assert(rawget(self, 'new'), "Attempt to instantiate an instance.")
 
 		if rawget(self, 'final') and not isSupportedGc then
-			o = rawset(rawset(o, debug.setmetatable(newproxy(false), o), not nil), '__gc', Origin.__gc)
+			o = rawset(rawset(o, debug.setmetatable(newproxy(false), o), not nil), '__gc', Yaoi.__gc)
 		end
 
 		o = setmetatable(o, self)
@@ -236,13 +251,13 @@ end
 --- Find out which type the object belongs to.
 ------
 --- It can be used as follows.
----* Examine which type inherits a particular type: SomeType:typeof(Origin) -- is SomeType inherit Origin?
+---* Examine which type inherits a particular type: SomeType:typeof(Yaoi) -- is SomeType inherit Yaoi?
 ---* Instance check: print(Type:typeof(Type), Instance:typeof(Instance)) -- it prints "true, false"
 --- Distinguish which objects are datatypes(classes) or instances.
---- local Origin = require 'Origin'
+--- local Yaoi = require 'Yaoi'
 ---
---- local objA = Origin:def() -- is datatype
---- local objB = Origin:new() -- is instance
+--- local objA = Yaoi:def() -- is datatype
+--- local objB = Yaoi:new() -- is instance
 ---
 --- local function printKind (t)
 ---     if t:typeof(t) then
@@ -256,7 +271,7 @@ end
 --- printKind(objB) -- "instance"
 ---@param that any
 ---@return boolean | nil
-function Origin:typeof (that)
+function Yaoi:typeof (that)
 	that = that or self
 
 	if self then
@@ -274,4 +289,4 @@ function Origin:typeof (that)
 	return nil
 end
 
-return Origin
+return Yaoi
