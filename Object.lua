@@ -1,5 +1,7 @@
 --- SPDX-License-Identifier: LGPL-2.1-only
 
+--- Note: This file is no longer maintained. I will leave it as someone might use it.
+
 local newproxy = newproxy
 local getmetatable, setmetatable = getmetatable, setmetatable
 local type = type
@@ -207,7 +209,7 @@ end
 local Third = Second:new()
 
 function Third:new (o)
-	o = self:super(o)
+	o = self:super(o, true)
 
 	-- You can do all the required initializations in `First` and `Second` in one place.
 	if not o:typeof(o) then

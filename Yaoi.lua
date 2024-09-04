@@ -1,4 +1,3 @@
---[[
 --- Yet Another Object Implementation, for Lua.
 --- Copyright (C) 2024  icyselec
 ---
@@ -15,7 +14,6 @@
 --- You should have received a copy of the GNU Lesser General Public
 --- License along with this library; if not, write to the Free Software
 --- Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
---]]
 
 local newproxy = newproxy
 local getmetatable, setmetatable = getmetatable, setmetatable
@@ -45,7 +43,7 @@ local Object = require 'Yaoi'
 local SampleObject = Object:def()
 
 function SampleObject:new (o)
-	o = self:super(o)
+	o = self:base(o)
 
 	assert(o.mustneed)
 	o.optional = o.optional or 42
@@ -72,6 +70,7 @@ function Yaoi:def (o)
 			__gc = Yaoi.__gc,
 			new = Yaoi.new,
 			def = Yaoi.def,
+			base = Yaoi.base,
 		}
 	elseif not getmetatable(o) then
 		o = rawset(rawset(rawset(rawset(o, '__index', Yaoi.__index), '__gc', Yaoi.__gc), 'new', Yaoi.new), 'def', Yaoi.def)
@@ -154,7 +153,9 @@ end
 --- Front-end function that fires the constructor chain
 --- Because defining a class using annotations is like writing the constructor's parameters, this method should not have any annotations. All information is included in the class definition.
 function Yaoi:new (o)
-	return self:super(o, true)
+	o = self:base(o or {})
+
+	return o
 end
 
 local function tails (self, o)
@@ -170,9 +171,9 @@ end
 --- Invoking this method outside of the class's constructor definition is an undefined-behavior.
 ---
 --- If the inheritance chain is too long and takes too long to initialize the object, you can try to 'Constructor chain reconstruction'.
---- Tips: To enable this feature, pass the `true` value to the second parameter of `super` method.
+--- Tips: To enable this feature, pass the `true` value to the second parameter of `base` method.
 ---
---- ***Note*** this feature allows you to use it under the condition that you know everything about all super types.
+--- ***Note*** this feature allows you to use it under the condition that you know everything about all base types.
 --- If there's anything you don't know at all, We recommend you not to use it because it's an unsafe feature.
 ---
 --- The following code is an example using constructor chain reconstruction.
@@ -184,7 +185,7 @@ local Yaoi = require 'Yaoi'
 local First = Yaoi:def()
 
 function First:new (o)
-	o = self:super(o)
+	o = self:base(o)
 
 	assert(o.x)
 
@@ -196,7 +197,7 @@ end
 local Second = First:def()
 
 function Second:new (o)
-	o = self:super(o)
+	o = self:base(o)
 
 	assert(o.y)
 
@@ -208,7 +209,7 @@ end
 local Third = Second:def()
 
 function Third:new (o)
-	o = self:super(o, true)
+	o = self:base(o, true)
 
 	-- You can do all the required initializations in `First` and `Second` in one place.
 	assert(o.x and o.y and o.z)
@@ -223,11 +224,11 @@ local third = Third:new{x = 1, y = 2, z = 3,}
 ---@protected
 ---@generic T: Yaoi
 ---@param self T
----@param o any
+---@param o table
 ---@param recons? boolean
 ---@return T
 ---@nodiscard
-function Yaoi:super (o, recons)
+function Yaoi:base (o, recons)
 	o = o or {}
 
 	if not getmetatable(o) then
